@@ -19,8 +19,9 @@ function Show-Menu {
     Write-Host "  +----------------------------------------+" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "   1. Setup NVIDIA + performance settings"
-    Write-Host "   2. Setup Windows 11 cleanup"
-    Write-Host "   3. Setup both"
+    Write-Host "   2. Windows 11 Cleanup (Default)"
+    Write-Host "   3. Windows 11 Cleanup (Custom)"
+    Write-Host "   4. Setup both"
     Write-Host "   Q. Quit"
     Write-Host ""
 }
@@ -34,11 +35,12 @@ while (-not $batName) {
     switch ($choice.Trim().ToUpper()) {
         "1" { $batName = "tournament-setup.bat" }
         "2" { $batName = "run-win11debloat.bat" }
-        "3" { $batName = "RUN-ALL.bat" }
+        "3" { $batName = "run-win11debloat-custom.bat" }
+        "4" { $batName = "RUN-ALL.bat" }
         "Q" { Write-Host "  Cancelled." -ForegroundColor Yellow; return }
         default {
             Write-Host ""
-            Write-Host "  '$choice' isn't an option. Try 1, 2, 3 or Q." -ForegroundColor Yellow
+            Write-Host "  '$choice' isn't an option. Try 1-4 or Q." -ForegroundColor Yellow
         }
     }
 }
@@ -75,8 +77,26 @@ try {
 
     Start-Process -FilePath $target.FullName -WorkingDirectory $target.DirectoryName -Wait
 
-    # Tidy up the temp files, then close this window immediately.
+    # Tidy up the temp files
     Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+
+    $banner = @'
+
+   ___ _  _ ___ _____ _   _    _
+  |_ _| \| / __|_   _/_\ | |  | |
+   | || .` \__ \ | |/ _ \| |__| |__
+  |___|_|\_|___/ |_/_/ \_\____|____|
+    ___ ___  __  __ ___ _    ___ _____ ___
+   / __/ _ \|  \/  | _ \ |  | __|_   _| __|
+  | (_| (_) | |\/| |  _/ |__| _|  | | | _|
+   \___\___/|_|  |_|_| |____|___| |_| |___|
+
+'@
+
+    Clear-Host
+    Write-Host $banner -ForegroundColor Green
+    Start-Sleep -Seconds 2
+
     [Environment]::Exit(0)
 }
 catch {
