@@ -17,7 +17,6 @@ if %errorlevel% neq 0 (
         echo Could not elevate. Right-click this file and choose
         echo "Run as administrator" instead.
         echo.
-        pause
     )
     exit /b
 )
@@ -149,42 +148,6 @@ if not exist "%NVPI%" (
 )
 
 echo.
-echo Applying MSI Afterburner profile...
-echo.
-
-REM ============================================================
-REM  MSI AFTERBURNER
-REM  Requires Afterburner to be INSTALLED on the machine already
-REM  (it needs a kernel driver - it cannot run from the USB).
-REM
-REM  Put your exported profile .cfg files in a folder on the
-REM  stick called "AfterburnerProfiles" and they get copied in
-REM  before the profile is applied.
-REM ============================================================
-
-set "MSIAB=C:\Program Files (x86)\MSI Afterburner\MSIAfterburner.exe"
-set "MSIABPROF=C:\Program Files (x86)\MSI Afterburner\Profiles"
-set "SRCPROF=%~dp0AfterburnerProfiles"
-
-if not exist "%MSIAB%" (
-    echo NOTE: MSI Afterburner not installed on this PC.
-    echo Overclock/fan profile SKIPPED.
-) else (
-    REM --- Copy profile files from the USB into Afterburner ---
-    if exist "%SRCPROF%" (
-        xcopy "%SRCPROF%\*" "%MSIABPROF%\" /Y /Q >nul 2>&1
-        echo Profile files copied.
-    ) else (
-        echo NOTE: No AfterburnerProfiles folder on USB - using
-        echo whatever profile is already on this machine.
-    )
-
-    REM --- Launch Afterburner and apply Profile 1 ---
-    start "" "%MSIAB%" -Profile1
-    echo Afterburner profile 1 applied.
-)
-
-echo.
 echo ============================================================
 if "%FAILED%"=="1" (
     echo  WARNING: One or more settings may not have applied.
@@ -199,15 +162,11 @@ echo  If NVIDIA Control Panel was open, close and reopen it.
 echo ============================================================
 echo.
 
-REM --- Stay open on failure, auto-close on success ---
+REM --- Log any problem so nothing is lost when the window closes ---
 if "%FAILED%"=="1" (
-    echo  SOMETHING NEEDS ATTENTION - review the messages above.
-    echo.
-    echo  Press any key to close.
-    pause >nul
-) else (
-    echo  Closing in 5 seconds...
-    timeout /t 5 /nobreak >nul
+    echo  SOMETHING NEEDS ATTENTION - see setup-log.txt on the Desktop.
+    echo Tournament setup reported a problem on %COMPUTERNAME% at %DATE% %TIME% > "%USERPROFILE%\Desktop\setup-log.txt"
+    powercfg /getactivescheme >> "%USERPROFILE%\Desktop\setup-log.txt"
 )
 
 endlocal

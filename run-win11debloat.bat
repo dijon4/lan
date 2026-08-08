@@ -27,5 +27,3 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create
 echo.
 echo Done. Sign out and back in for all changes to take effect.
 
-echo.
-pause
