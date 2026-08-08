@@ -17,8 +17,11 @@ echo.
 echo Loading Win11Debloat menu...
 echo.
 
-REM --- No -RunDefaults or -Silent, so the interactive menu appears ---
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm 'https://debloat.raphi.re/'))) -CreateRestorePoint"
+REM --- NO parameters at all. Any parameter makes the script skip
+REM     the menu and run unattended, which is what broke this before.
+REM     The wizard offers a restore point itself.
+REM     Add -CLI below if you prefer the old text menu to the GUI.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((irm 'https://debloat.raphi.re/')))"
 
 echo.
 echo Done. Sign out and back in for all changes to take effect.
