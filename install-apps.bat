@@ -2,7 +2,8 @@
 setlocal
 
 REM ============================================================
-REM  Install Apps - Discord, Steam, Logitech G Hub
+REM  Install Apps - Discord, Steam, Logitech G Hub, FACEIT AC,
+REM  and the Riot Client (via the Valorant installer - NA region).
 REM  Also sets the desktop wallpaper from wallpaper.png.
 REM  Double-click, approve the UAC prompt, and it installs all
 REM  three apps using winget (Windows' built-in installer).
@@ -90,6 +91,22 @@ echo ============================================================
 echo   Installing Logitech G HUB...
 echo ============================================================
 winget install --id Logitech.GHUB -e --source winget --accept-package-agreements --accept-source-agreements --silent
+if %errorlevel% neq 0 set "FAILED=1"
+echo.
+
+echo ============================================================
+echo   Installing FACEIT Anti-Cheat...
+echo ============================================================
+winget install --id FACEITLTD.FACEITAC -e --source winget --accept-package-agreements --accept-source-agreements --silent
+if %errorlevel% neq 0 set "FAILED=1"
+echo.
+
+echo ============================================================
+echo   Installing Riot Client (via Valorant - NA)...
+echo   Note: this installs the Riot Client and registers Valorant.
+echo   The full game is NOT downloaded unless you launch it.
+echo ============================================================
+winget install --id RiotGames.Valorant.NA -e --source winget --accept-package-agreements --accept-source-agreements --silent
 if %errorlevel% neq 0 set "FAILED=1"
 echo.
 
