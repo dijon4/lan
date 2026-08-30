@@ -16,6 +16,10 @@ $RepoName   = "lan"
 
 $ErrorActionPreference = "Stop"
 
+# Wipe the PowerShell copyright header immediately, before anything
+# else prints, so the very first thing on screen is this tool.
+Clear-Host
+
 # ============================================================
 #  STEP 0 - Get administrator rights ONCE, up front.
 #  If we aren't admin yet, relaunch this same command in an
@@ -79,8 +83,9 @@ while ($selected.Count -eq 0) {
 
     $trimmed = $choice.Trim().ToUpper()
     if ($trimmed -eq "Q") {
-        Write-Host "  Cancelled." -ForegroundColor Yellow
-        return
+        Write-Host "  Closing." -ForegroundColor Yellow
+        Start-Sleep -Milliseconds 400
+        [Environment]::Exit(0)
     }
 
     $picked     = @()   # chosen option objects, in the order typed
