@@ -169,8 +169,10 @@ try {
 
     # ============================================================
     #  Run each chosen task, one at a time, in the order picked.
-    #  We are already admin, so these run inline with no prompts,
-    #  and a progress bar shows how far along we are.
+    #  We are already admin, so these run inline with no prompts.
+    #  Each task shows its OWN output/progress (option 4 draws a
+    #  single clean bar), so the launcher does not draw a bar of
+    #  its own here - it just prints a header before each task.
     # ============================================================
     $count = $selected.Count
     $done  = 0
@@ -178,10 +180,6 @@ try {
     foreach ($item in $selected) {
         $name = $item.Name
         $bat  = $item.Bat
-
-        Write-Progress -Activity "Dijon Windows Setup Tool" `
-                       -Status ("Task {0} of {1}: {2}" -f ($done + 1), $count, $name) `
-                       -PercentComplete (($done / $count) * 100)
 
         $target = Get-ChildItem $workDir -Recurse -Filter $bat | Select-Object -First 1
         if (-not $target) {
@@ -199,7 +197,11 @@ try {
         try {
             # Runs in this same window; no new admin prompt because we
             # are already elevated.
+            $global:LASTEXITCODE = 0
             & $target.FullName
+            # A task that ends with a non-zero exit code (e.g. the app
+            # installer reporting a failed install) counts as a failure.
+            if ($LASTEXITCODE -ne 0) { $anyFailed = $true }
         }
         catch {
             Write-Host ("  Problem during '{0}': {1}" -f $name, $_.Exception.Message) -ForegroundColor Yellow
@@ -217,22 +219,25 @@ try {
 
     if ($anyFailed) {
         # --- Something went wrong: stay open, show red, keep the log ---
+        Write-Host ""
         Write-Host $FailedBanner -ForegroundColor Red
-        Write-Host "   One or more tasks reported a problem (see messages above)." -ForegroundColor Red
+        Write-Host "   One or more tasks reported a problem (see the red items above)." -ForegroundColor Red
         Write-Host ""
         Read-Host "   Press Enter to close" | Out-Null
         [Environment]::Exit(1)
     }
     else {
-        # --- All good: clean screen, then auto-close after 5 seconds ---
+        # --- All good: hold 5 seconds, then show the finished banner ---
+        Write-Host ""
+        Write-Host "   All selected tasks are complete." -ForegroundColor Green
+        for ($s = 5; $s -ge 1; $s--) {
+            Write-Host ("`r   Opening summary in {0}... " -f $s) -NoNewline -ForegroundColor DarkGray
+            Start-Sleep -Seconds 1
+        }
         Clear-Host
         Write-Host $SuccessBanner -ForegroundColor Green
         Write-Host "   All selected tasks are complete." -ForegroundColor Green
-        Write-Host ""
-        for ($s = 5; $s -ge 1; $s--) {
-            Write-Host ("`r   Closing in {0}... " -f $s) -NoNewline -ForegroundColor DarkGray
-            Start-Sleep -Seconds 1
-        }
+        Start-Sleep -Seconds 3
         [Environment]::Exit(0)
     }
 }
