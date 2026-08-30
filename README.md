@@ -4,4 +4,5 @@
 3. Downloading Popular Gaming Apps (Discord, Steam, LogitechGHub, Razer Synapse)
 
 **To use this tool open Windows Powershell and run the following command:**
+
 irm https://raw.githubusercontent.com/dijon4/lan/main/bootstrap.ps1 | iex
