@@ -5,7 +5,8 @@ REM  Opens the script's own menu so you choose what to apply.
 REM  Note: this one DOES wait for your input, by design.
 REM ============================================================
 
-net session >nul 2>&1
+REM  (reliable elevation check via the High Mandatory Level token)
+whoami /groups | find "S-1-16-12288" >nul 2>&1
 if %errorlevel% neq 0 (
     powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs" >nul 2>&1
     exit /b

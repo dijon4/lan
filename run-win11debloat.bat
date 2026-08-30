@@ -9,7 +9,8 @@ REM  lighter set of changes.
 REM ============================================================
 
 REM --- Elevate if we aren't already admin ---
-net session >nul 2>&1
+REM  (reliable elevation check via the High Mandatory Level token)
+whoami /groups | find "S-1-16-12288" >nul 2>&1
 if %errorlevel% neq 0 (
     powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs" >nul 2>&1
     exit /b

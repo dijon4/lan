@@ -9,7 +9,9 @@ REM  No menu, no prompts.
 REM ============================================================
 
 REM --- If not running as admin, relaunch with elevation ---
-net session >nul 2>&1
+REM  (reliable elevation check - looks for the High Mandatory Level
+REM   token, which only exists when running elevated)
+whoami /groups | find "S-1-16-12288" >nul 2>&1
 if %errorlevel% neq 0 (
     echo Requesting administrator rights...
     powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs" >nul 2>&1
@@ -36,7 +38,6 @@ if %errorlevel% neq 0 (
     echo install "App Installer" from the Microsoft Store, then
     echo run this again.
     echo.
-    pause
     exit /b 1
 )
 

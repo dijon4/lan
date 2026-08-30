@@ -170,7 +170,8 @@ try {
         $done++
     }
 
-    Write-Progress -Activity "Dijon PC Cleanup Tool" -Status "All tasks complete" -PercentComplete 100 -Completed
+    # Remove the progress bar so it doesn't linger on the final screen
+    Write-Progress -Activity "Dijon PC Cleanup Tool" -Completed
 
     # Tidy up the temp files
     Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
@@ -188,10 +189,13 @@ try {
 
 '@
 
+    # Wipe everything so only the finished banner is on screen
+    Clear-Host
     Write-Host $banner -ForegroundColor Green
-    Write-Host "  All selected tasks are complete." -ForegroundColor Green
+    Write-Host "   All selected tasks are complete." -ForegroundColor Green
     Write-Host ""
-    Read-Host "  Press Enter to close this window"
+    Read-Host "   Press Enter to exit" | Out-Null
+    [Environment]::Exit(0)
 }
 catch {
     # On failure we stay open, otherwise the error vanishes before
