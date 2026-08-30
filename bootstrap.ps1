@@ -135,16 +135,41 @@ $SuccessBanner = @'
 
 $FailedBanner = @'
 
-   _____ _    ___ _     _____ ___
-  |  ___/ \  |_ _| |   | ____|   \
-  | |_ / _ \  | || |   |  _| | |) |
-  |  _/ ___ \ | || |__ | |___|  _/
-  |_|/_/   \_\___|____||_____|_|
+   _____ _    ___ _
+  |  ___/ \  |_ _| |
+  | |_ / _ \  | || |
+  |  _/ ___ \ | || |___
+  |_|/_/   \_\___|_____|
 
 '@
 
-# Tracks whether anything went wrong so we know which banner to show.
-$anyFailed = $false
+# Log file - each task appends its output here; "See logs" shows it.
+$logPath = Join-Path $env:TEMP "dijon-setup.log"
+$env:DIJON_LOG = $logPath
+"DIJON Windows Setup Tool - log started $(Get-Date)" | Set-Content -Path $logPath -ErrorAction SilentlyContinue
+
+# Runs a single task (a .bat) and returns $true on success, $false on
+# failure. Used for both the first pass and any retries.
+function Invoke-DijonTask($item, $index, $count, $work) {
+    $target = Get-ChildItem $work -Recurse -Filter $item.Bat | Select-Object -First 1
+    if (-not $target) {
+        Write-Host ""
+        Write-Host "  WARNING: $($item.Bat) was not found inside the package." -ForegroundColor Yellow
+        return $false
+    }
+    Write-Host ""
+    Write-Host ("  ===== Task {0} of {1}: {2} =====" -f $index, $count, $item.Name) -ForegroundColor Green
+    Write-Host ""
+    try {
+        $global:LASTEXITCODE = 0
+        & $target.FullName
+        return ($LASTEXITCODE -eq 0)
+    }
+    catch {
+        Write-Host ("  Problem during '{0}': {1}" -f $item.Name, $_.Exception.Message) -ForegroundColor Yellow
+        return $false
+    }
+}
 
 # --- Download the package once ---
 $zipUrl  = "https://github.com/$GitHubUser/$RepoName/archive/refs/heads/main.zip"
@@ -170,75 +195,82 @@ try {
     # ============================================================
     #  Run each chosen task, one at a time, in the order picked.
     #  We are already admin, so these run inline with no prompts.
-    #  Each task shows its OWN output/progress (option 4 draws a
-    #  single clean bar), so the launcher does not draw a bar of
-    #  its own here - it just prints a header before each task.
+    #  Each task shows its OWN output/progress (options 1 and 4 draw
+    #  a single clean bar), so the launcher does not draw a bar here.
     # ============================================================
-    $count = $selected.Count
-    $done  = 0
+    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue   # tidy the downloaded zip
 
+    $count  = $selected.Count
+    $failed = @()          # tasks that did not succeed
+    $idx    = 0
     foreach ($item in $selected) {
-        $name = $item.Name
-        $bat  = $item.Bat
-
-        $target = Get-ChildItem $workDir -Recurse -Filter $bat | Select-Object -First 1
-        if (-not $target) {
-            Write-Host ""
-            Write-Host "  WARNING: $bat was not found inside the package. Skipping." -ForegroundColor Yellow
-            $anyFailed = $true
-            $done++
-            continue
-        }
-
-        Write-Host ""
-        Write-Host ("  ===== Task {0} of {1}: {2} =====" -f ($done + 1), $count, $name) -ForegroundColor Green
-        Write-Host ""
-
-        try {
-            # Runs in this same window; no new admin prompt because we
-            # are already elevated.
-            $global:LASTEXITCODE = 0
-            & $target.FullName
-            # A task that ends with a non-zero exit code (e.g. the app
-            # installer reporting a failed install) counts as a failure.
-            if ($LASTEXITCODE -ne 0) { $anyFailed = $true }
-        }
-        catch {
-            Write-Host ("  Problem during '{0}': {1}" -f $name, $_.Exception.Message) -ForegroundColor Yellow
-            $anyFailed = $true
-        }
-
-        $done++
+        $idx++
+        if (-not (Invoke-DijonTask $item $idx $count $workDir)) { $failed += $item }
     }
 
-    # Remove the progress bar so it doesn't linger on the final screen
-    Write-Progress -Activity "Dijon Windows Setup Tool" -Completed
+    # ============================================================
+    #  End screen.
+    #   - Nothing failed: hold 5s, show the finished banner, close.
+    #   - Something failed: show FAIL + a menu (retry / logs / exit)
+    #     and loop until it all passes or the user exits.
+    # ============================================================
+    while ($true) {
 
-    # Tidy up the temp files
-    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+        if ($failed.Count -eq 0) {
+            Remove-Item $workDir -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host ""
+            Write-Host "   All selected tasks are complete." -ForegroundColor Green
+            for ($s = 5; $s -ge 1; $s--) {
+                Write-Host ("`r   Opening summary in {0}... " -f $s) -NoNewline -ForegroundColor DarkGray
+                Start-Sleep -Seconds 1
+            }
+            Clear-Host
+            Write-Host $SuccessBanner -ForegroundColor Green
+            Write-Host "   All selected tasks are complete." -ForegroundColor Green
+            Start-Sleep -Seconds 3
+            [Environment]::Exit(0)
+        }
 
-    if ($anyFailed) {
-        # --- Something went wrong: stay open, show red, keep the log ---
         Write-Host ""
         Write-Host $FailedBanner -ForegroundColor Red
-        Write-Host "   One or more tasks reported a problem (see the red items above)." -ForegroundColor Red
+        Write-Host ("   Failed: {0}" -f (($failed | ForEach-Object { $_.Name }) -join ', ')) -ForegroundColor Red
         Write-Host ""
-        Read-Host "   Press Enter to close" | Out-Null
-        [Environment]::Exit(1)
-    }
-    else {
-        # --- All good: hold 5 seconds, then show the finished banner ---
+        Write-Host "   1. Retry the failed task(s)"
+        Write-Host "   2. See logs"
+        Write-Host "   3. Exit"
         Write-Host ""
-        Write-Host "   All selected tasks are complete." -ForegroundColor Green
-        for ($s = 5; $s -ge 1; $s--) {
-            Write-Host ("`r   Opening summary in {0}... " -f $s) -NoNewline -ForegroundColor DarkGray
-            Start-Sleep -Seconds 1
+        $pick = (Read-Host "   Choose 1, 2 or 3").Trim()
+
+        if ($pick -eq "1") {
+            $retry  = $failed
+            $failed = @()
+            $rc = $retry.Count
+            $ri = 0
+            foreach ($item in $retry) {
+                $ri++
+                if (-not (Invoke-DijonTask $item $ri $rc $workDir)) { $failed += $item }
+            }
         }
-        Clear-Host
-        Write-Host $SuccessBanner -ForegroundColor Green
-        Write-Host "   All selected tasks are complete." -ForegroundColor Green
-        Start-Sleep -Seconds 3
-        [Environment]::Exit(0)
+        elseif ($pick -eq "2") {
+            Write-Host ""
+            if (Test-Path $env:DIJON_LOG) {
+                Write-Host ("   ----- LOG  ({0}) -----" -f $env:DIJON_LOG) -ForegroundColor Cyan
+                Get-Content $env:DIJON_LOG | Out-Host
+                Write-Host "   ----- END OF LOG -----" -ForegroundColor Cyan
+            }
+            else {
+                Write-Host "   No log file was found." -ForegroundColor Yellow
+            }
+            Write-Host ""
+            Read-Host "   Press Enter to go back" | Out-Null
+        }
+        elseif ($pick -eq "3") {
+            Remove-Item $workDir -Recurse -Force -ErrorAction SilentlyContinue
+            [Environment]::Exit(1)
+        }
+        else {
+            Write-Host "   Please enter 1, 2 or 3." -ForegroundColor Yellow
+        }
     }
 }
 catch {

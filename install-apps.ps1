@@ -19,24 +19,39 @@ $ProgressPreference    = "Continue"
 
 $failures = @()   # labels of steps that did not succeed
 
+# Where to append detailed output so the launcher's "See logs" can show it.
+$LogFile = if ($env:DIJON_LOG) { $env:DIJON_LOG } else { Join-Path $env:TEMP 'dijon-setup.log' }
+function Log($msg) { Add-Content -Path $LogFile -Value $msg -ErrorAction SilentlyContinue }
+Log ""
+Log "==================================================="
+Log "Install Apps  -  $(Get-Date)"
+Log "==================================================="
+
 # ------------------------------------------------------------
 #  Helpers
 # ------------------------------------------------------------
 
 # Install one winget package silently. Returns $true on success,
 # and also treats "already installed / nothing to do" as success
-# so re-running the tool doesn't show false failures.
+# so re-running the tool doesn't show false failures. The full winget
+# output is written to the log either way.
 function Install-App($id) {
+    Log ""
+    Log "--- winget install $id ---"
     $out  = winget install --id $id -e --source winget --accept-package-agreements --accept-source-agreements --silent --disable-interactivity 2>&1
     $code = $LASTEXITCODE
+    $text = ($out | Out-String)
+    Log $text
+    Log "exit code: $code"
+
     if ($code -eq 0) { return $true }
 
-    $text = ($out | Out-String)
     if ($text -match 'already installed' -or
         $text -match 'No newer'          -or
         $text -match 'No applicable'     -or
         $text -match 'no available upgrade' -or
         $code -eq -1978335189) {
+        Log "(treated as success: already installed / nothing to do)"
         return $true
     }
     return $false
@@ -111,17 +126,23 @@ foreach ($step in $steps) {
                    -PercentComplete $pct
 
     $ok = $false
-    try { $ok = & $step.Action } catch { $ok = $false }
+    try { $ok = & $step.Action } catch { $ok = $false; Log ("EXCEPTION in {0}: {1}" -f $step.Label, $_.Exception.Message) }
 
     if (-not $ok) {
         # Trim "Installing " / "Setting " etc. for a tidy failure label
         $short = $step.Label -replace '^(Installing|Setting|Creating)\s+', ''
         $failures += $short
         Write-Host ("   FAILED: {0}" -f $short) -ForegroundColor Red
+        Log ("STEP FAILED: {0}" -f $step.Label)
     }
 }
 
 Write-Progress -Activity "Installing important apps" -Completed
 
-# Signal the outcome to whoever launched us.
-if ($failures.Count -gt 0) { exit 1 } else { exit 0 }
+if ($failures.Count -gt 0) {
+    Log ("RESULT: FAILED - " + ($failures -join ', '))
+    exit 1
+} else {
+    Log "RESULT: all steps OK"
+    exit 0
+}

@@ -16,6 +16,14 @@ $ProgressPreference    = "Continue"
 
 $failures = @()
 
+# Where to append detail so the launcher's "See logs" can show it.
+$LogFile = if ($env:DIJON_LOG) { $env:DIJON_LOG } else { Join-Path $env:TEMP 'dijon-setup.log' }
+function Log($msg) { Add-Content -Path $LogFile -Value $msg -ErrorAction SilentlyContinue }
+Log ""
+Log "==================================================="
+Log "NVIDIA + Performance Settings  -  $(Get-Date)"
+Log "==================================================="
+
 # ------------------------------------------------------------
 #  Steps
 # ------------------------------------------------------------
@@ -100,15 +108,25 @@ foreach ($step in $steps) {
                    -PercentComplete $pct
 
     $ok = $false
-    try { $ok = & $step.Action } catch { $ok = $false }
+    try { $ok = & $step.Action } catch { $ok = $false; Log ("EXCEPTION in {0}: {1}" -f $step.Label, $_.Exception.Message) }
 
     if (-not $ok) {
         $short = $step.Label -replace '^(Applying|Disabling|Setting|Creating)\s+', ''
         $failures += $short
         Write-Host ("   FAILED: {0}" -f $short) -ForegroundColor Red
+        Log ("STEP FAILED: {0}" -f $step.Label)
+    }
+    else {
+        Log ("OK: {0}" -f $step.Label)
     }
 }
 
 Write-Progress -Activity "Applying NVIDIA + performance settings" -Completed
 
-if ($failures.Count -gt 0) { exit 1 } else { exit 0 }
+if ($failures.Count -gt 0) {
+    Log ("RESULT: FAILED - " + ($failures -join ', '))
+    exit 1
+} else {
+    Log "RESULT: all steps OK"
+    exit 0
+}
