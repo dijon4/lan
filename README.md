@@ -1,4 +1,4 @@
-**Users use this tool to configure:**
+**Users use this tool to automate:**
 1. High performance NVIDIA graphics settings
 2. Windows11 Debloating
 3. Downloading Popular Gaming Apps (Discord, Steam, GHUB, Riot)
