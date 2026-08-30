@@ -3,6 +3,7 @@ setlocal
 
 REM ============================================================
 REM  Install Apps - Discord, Steam, Logitech G Hub
+REM  Also sets the desktop wallpaper from wallpaper.png.
 REM  Double-click, approve the UAC prompt, and it installs all
 REM  three apps using winget (Windows' built-in installer).
 REM  No menu, no prompts.
@@ -29,6 +30,36 @@ echo.
 echo Running as: %USERNAME%
 echo.
 
+set "FAILED=0"
+
+REM ============================================================
+REM  Set the desktop wallpaper
+REM  The image ships next to this script (wallpaper.png). We copy
+REM  it to a permanent spot first, because the folder this script
+REM  runs from gets deleted afterwards - pointing the wallpaper at
+REM  a temp file would leave a black desktop on next login.
+REM ============================================================
+echo Setting desktop wallpaper...
+set "WP_SRC=%~dp0wallpaper.png"
+set "WP_DST=%USERPROFILE%\Pictures\dijon-wallpaper.png"
+if not exist "%WP_SRC%" (
+    echo   NOTE: wallpaper.png not found - skipping wallpaper.
+) else (
+    copy /Y "%WP_SRC%" "%WP_DST%" >nul
+    if errorlevel 1 (
+        echo   WARNING: could not copy the wallpaper image.
+        set "FAILED=1"
+    ) else (
+        REM  "Fill" fit mode
+        reg add "HKCU\Control Panel\Desktop" /v WallpaperStyle /t REG_SZ /d 10 /f >nul
+        reg add "HKCU\Control Panel\Desktop" /v TileWallpaper  /t REG_SZ /d 0  /f >nul
+        REM  Apply it live - no logoff needed
+        powershell -NoProfile -Command "Add-Type -MemberDefinition '[DllImport(\"user32.dll\", SetLastError=true)] public static extern bool SystemParametersInfo(int a, int b, string c, int d);' -Name Wp -Namespace Win32; [void][Win32.Wp]::SystemParametersInfo(20,0,'%WP_DST%',3)"
+        echo   Wallpaper applied.
+    )
+)
+echo.
+
 REM --- Make sure winget is available before we try to use it ---
 where winget >nul 2>&1
 if %errorlevel% neq 0 (
@@ -40,8 +71,6 @@ if %errorlevel% neq 0 (
     echo.
     exit /b 1
 )
-
-set "FAILED=0"
 
 echo ============================================================
 echo   Installing Discord...

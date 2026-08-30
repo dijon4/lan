@@ -48,7 +48,7 @@ $OptionMap = [ordered]@{
     "1" = @{ Name = "Setup NVIDIA + performance settings";           Bat = "tournament-setup.bat" }
     "2" = @{ Name = "Windows 11 Cleanup (Default)";                  Bat = "run-win11debloat.bat" }
     "3" = @{ Name = "Windows 11 Cleanup (Custom)";                   Bat = "run-win11debloat-custom.bat" }
-    "4" = @{ Name = "Install apps (Discord, Steam, Logitech G HUB)"; Bat = "install-apps.bat" }
+    "4" = @{ Name = "Install apps (Discord, Steam, G HUB) + set wallpaper"; Bat = "install-apps.bat" }
 }
 
 function Show-Menu {
@@ -109,6 +109,33 @@ while ($selected.Count -eq 0) {
     }
 }
 
+# --- Banners shown at the end (success vs failure) ---
+$SuccessBanner = @'
+
+   ___ _  _ ___ _____ _   _    _
+  |_ _| \| / __|_   _/_\ | |  | |
+   | || .` \__ \ | |/ _ \| |__| |__
+  |___|_|\_|___/ |_/_/ \_\____|____|
+    ___ ___  __  __ ___ _    ___ _____ ___
+   / __/ _ \|  \/  | _ \ |  | __|_   _| __|
+  | (_| (_) | |\/| |  _/ |__| _|  | | | _|
+   \___\___/|_|  |_|_| |____|___| |_| |___|
+
+'@
+
+$FailedBanner = @'
+
+   _____ _    ___ _     _____ ___
+  |  ___/ \  |_ _| |   | ____|   \
+  | |_ / _ \  | || |   |  _| | |) |
+  |  _/ ___ \ | || |__ | |___|  _/
+  |_|/_/   \_\___|____||_____|_|
+
+'@
+
+# Tracks whether anything went wrong so we know which banner to show.
+$anyFailed = $false
+
 # --- Download the package once ---
 $zipUrl  = "https://github.com/$GitHubUser/$RepoName/archive/refs/heads/main.zip"
 $workDir = Join-Path $env:TEMP "dijon-cleanup"
@@ -150,6 +177,7 @@ try {
         if (-not $target) {
             Write-Host ""
             Write-Host "  WARNING: $bat was not found inside the package. Skipping." -ForegroundColor Yellow
+            $anyFailed = $true
             $done++
             continue
         }
@@ -165,6 +193,7 @@ try {
         }
         catch {
             Write-Host ("  Problem during '{0}': {1}" -f $name, $_.Exception.Message) -ForegroundColor Yellow
+            $anyFailed = $true
         }
 
         $done++
@@ -176,32 +205,34 @@ try {
     # Tidy up the temp files
     Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
 
-    $banner = @'
-
-   ___ _  _ ___ _____ _   _    _
-  |_ _| \| / __|_   _/_\ | |  | |
-   | || .` \__ \ | |/ _ \| |__| |__
-  |___|_|\_|___/ |_/_/ \_\____|____|
-    ___ ___  __  __ ___ _    ___ _____ ___
-   / __/ _ \|  \/  | _ \ |  | __|_   _| __|
-  | (_| (_) | |\/| |  _/ |__| _|  | | | _|
-   \___\___/|_|  |_|_| |____|___| |_| |___|
-
-'@
-
-    # Wipe everything so only the finished banner is on screen
-    Clear-Host
-    Write-Host $banner -ForegroundColor Green
-    Write-Host "   All selected tasks are complete." -ForegroundColor Green
-    Write-Host ""
-    Read-Host "   Press Enter to exit" | Out-Null
-    [Environment]::Exit(0)
+    if ($anyFailed) {
+        # --- Something went wrong: stay open, show red, keep the log ---
+        Write-Host $FailedBanner -ForegroundColor Red
+        Write-Host "   One or more tasks reported a problem (see messages above)." -ForegroundColor Red
+        Write-Host ""
+        Read-Host "   Press Enter to close" | Out-Null
+        [Environment]::Exit(1)
+    }
+    else {
+        # --- All good: clean screen, then auto-close after 5 seconds ---
+        Clear-Host
+        Write-Host $SuccessBanner -ForegroundColor Green
+        Write-Host "   All selected tasks are complete." -ForegroundColor Green
+        Write-Host ""
+        for ($s = 5; $s -ge 1; $s--) {
+            Write-Host ("`r   Closing in {0}... " -f $s) -NoNewline -ForegroundColor DarkGray
+            Start-Sleep -Seconds 1
+        }
+        [Environment]::Exit(0)
+    }
 }
 catch {
-    # On failure we stay open, otherwise the error vanishes before
-    # you can read it.
+    # A hard failure (download, extract, etc.): never auto-close, show red
+    # so nothing is lost before it can be read.
+    Write-Progress -Activity "Dijon PC Cleanup Tool" -Completed
+    Write-Host $FailedBanner -ForegroundColor Red
+    Write-Host "   FAILED: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ""
-    Write-Host "  FAILED: $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host ""
-    Read-Host "  Press Enter to close"
+    Read-Host "   Press Enter to close" | Out-Null
+    [Environment]::Exit(1)
 }
