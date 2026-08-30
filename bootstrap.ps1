@@ -1,5 +1,5 @@
 # ============================================================
-#  DIJON PC CLEANUP TOOL - Bootstrap
+#  DIJON WINDOWS SETUP TOOL - Bootstrap
 #  Shows a menu, then downloads and runs the chosen setup(s).
 #  You can pick several at once, separated by commas (e.g. 1,2,4).
 #
@@ -43,18 +43,23 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     return
 }
 
+# We are now running in the elevated window. Clear the PowerShell
+# copyright header so only our tool is on screen, and set a clean title.
+Clear-Host
+$Host.UI.RawUI.WindowTitle = "DIJON Windows Setup Tool"
+
 # Each menu number maps to the .bat file it runs. Order here = order shown.
 $OptionMap = [ordered]@{
     "1" = @{ Name = "Setup NVIDIA + performance settings";           Bat = "tournament-setup.bat" }
     "2" = @{ Name = "Windows 11 Cleanup (Default)";                  Bat = "run-win11debloat.bat" }
     "3" = @{ Name = "Windows 11 Cleanup (Custom)";                   Bat = "run-win11debloat-custom.bat" }
-    "4" = @{ Name = "Install apps (Discord, Steam, G HUB) + set wallpaper"; Bat = "install-apps.bat" }
+    "4" = @{ Name = "Install Important Apps (Discord, Steam, Riot, GHUB)"; Bat = "install-apps.bat" }
 }
 
 function Show-Menu {
     Write-Host ""
     Write-Host "  +----------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  |     LAUNCHED DIJON PC CLEANUP TOOL     |" -ForegroundColor Cyan
+    Write-Host "  |        DIJON WINDOWS SETUP TOOL        |" -ForegroundColor Cyan
     Write-Host "  +----------------------------------------+" -ForegroundColor Cyan
     Write-Host ""
     foreach ($key in $OptionMap.Keys) {
@@ -169,7 +174,7 @@ try {
         $name = $item.Name
         $bat  = $item.Bat
 
-        Write-Progress -Activity "Dijon PC Cleanup Tool" `
+        Write-Progress -Activity "Dijon Windows Setup Tool" `
                        -Status ("Task {0} of {1}: {2}" -f ($done + 1), $count, $name) `
                        -PercentComplete (($done / $count) * 100)
 
@@ -200,7 +205,7 @@ try {
     }
 
     # Remove the progress bar so it doesn't linger on the final screen
-    Write-Progress -Activity "Dijon PC Cleanup Tool" -Completed
+    Write-Progress -Activity "Dijon Windows Setup Tool" -Completed
 
     # Tidy up the temp files
     Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
@@ -229,7 +234,7 @@ try {
 catch {
     # A hard failure (download, extract, etc.): never auto-close, show red
     # so nothing is lost before it can be read.
-    Write-Progress -Activity "Dijon PC Cleanup Tool" -Completed
+    Write-Progress -Activity "Dijon Windows Setup Tool" -Completed
     Write-Host $FailedBanner -ForegroundColor Red
     Write-Host "   FAILED: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host ""
