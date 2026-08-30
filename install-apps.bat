@@ -4,7 +4,8 @@ setlocal
 REM ============================================================
 REM  Install Apps - Discord, Steam, Logitech G Hub, FACEIT AC,
 REM  and the Riot Client (via the Valorant installer - NA region).
-REM  Also sets the desktop wallpaper from wallpaper.png.
+REM  Also sets the desktop wallpaper from wallpaper.png and drops
+REM  desktop shortcuts for the installed apps.
 REM  Double-click, approve the UAC prompt, and it installs all
 REM  three apps using winget (Windows' built-in installer).
 REM  No menu, no prompts.
@@ -108,6 +109,17 @@ echo   The full game is NOT downloaded unless you launch it.
 echo ============================================================
 winget install --id RiotGames.Valorant.NA -e --source winget --accept-package-agreements --accept-source-agreements --silent
 if %errorlevel% neq 0 set "FAILED=1"
+echo.
+
+echo ============================================================
+echo   Creating desktop shortcuts...
+echo ============================================================
+REM  Each installer drops a shortcut in the Start Menu that points
+REM  at the right .exe. We just copy those onto the Desktop, so we
+REM  never have to guess where each app got installed.
+REM  (FACEIT Anti-Cheat is a background service with no app to open,
+REM   so it is intentionally not included here.)
+powershell -NoProfile -Command "$d=[Environment]::GetFolderPath('Desktop'); $s=@([Environment]::GetFolderPath('CommonStartMenu'),[Environment]::GetFolderPath('StartMenu')); foreach($a in 'Discord','Steam','Riot Client','Logitech G HUB'){ $l=Get-ChildItem $s -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | Where-Object { $_.BaseName -like ('*'+$a+'*') } | Select-Object -First 1; if($l){ Copy-Item $l.FullName (Join-Path $d $l.Name) -Force -ErrorAction SilentlyContinue; Write-Host ('   Added: '+$l.BaseName) } else { Write-Host ('   Not found yet: '+$a) } }"
 echo.
 
 echo ============================================================
