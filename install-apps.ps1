@@ -368,7 +368,7 @@ foreach ($step in $steps) {
         try { $present = & $step.Check } catch { $present = $false }
         if ($present) {
             $shortSkip = $step.Label -replace '^Installing\s+', ''
-            Write-Host ("   Already installed - skipped {0}" -f $shortSkip) -ForegroundColor DarkGray
+            Write-Host ("   * {0} is already installed, skipped!" -f $shortSkip) -ForegroundColor Green
             Log ("SKIP (already installed): {0}" -f $step.Label)
             continue
         }
