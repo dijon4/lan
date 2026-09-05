@@ -116,30 +116,34 @@ function Install-Discord {
     return $installed
 }
 
-# The NVIDIA App is NOT in the winget catalogue, so we fetch NVIDIA's
-# own installer straight from their site and run it silently. The
-# download link changes with each version, so we read the current one
-# off NVIDIA's page rather than hard-coding it (which would rot).
-function Install-NvidiaApp {
+# We don't need the whole NVIDIA App - only the latest GRAPHICS DRIVER,
+# matched to whatever GPU each PC happens to have. This uses the
+# community "nvidia-update" script (ZenitH-AT), which detects the GPU,
+# finds the newest matching driver, installs it silently, and skips
+# itself if the PC is already on the latest. It needs 7-Zip to unpack
+# the driver package, so we make sure that's present first.
+function Update-NvidiaDriver {
     Log ""
-    Log "--- NVIDIA App (official installer) ---"
+    Log "--- NVIDIA driver update (nvidia-update) ---"
+
+    # nvidia-update needs an archiver (7-Zip) to extract the driver.
+    $have7z = (Get-Command 7z -ErrorAction SilentlyContinue) -or
+              (Test-Path (Join-Path $env:ProgramFiles       '7-Zip\7z.exe')) -or
+              (Test-Path (Join-Path ${env:ProgramFiles(x86)} '7-Zip\7z.exe'))
+    if (-not $have7z) {
+        Log "7-Zip not found - installing it first (needed to unpack the driver)."
+        Install-App '7zip.7zip' | Out-Null
+    }
+
     try {
-        $page = Invoke-WebRequest -Uri 'https://www.nvidia.com/en-us/software/nvidia-app/' -UseBasicParsing
-        $m = [regex]::Match($page.Content, 'https://us\.download\.nvidia\.com/nvapp/client/[\d\.]+/NVIDIA_app_v[\d\.]+\.exe')
-        if (-not $m.Success) {
-            Log "Could not find the NVIDIA App download link on NVIDIA's page."
-            return $false
-        }
-        $url = $m.Value
-        Log "NVIDIA App URL: $url"
-        $exe = Join-Path $env:TEMP 'NVIDIA_App.exe'
-        Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
-        # NVIDIA's silent switches: silent, no reboot, no EULA/finish/splash screens.
-        $p = Start-Process -FilePath $exe -ArgumentList '-s','-noreboot','-noeula','-nofinish','-nosplash' -Wait -PassThru
-        Log "NVIDIA App installer exit code: $($p.ExitCode)"
-        return ($p.ExitCode -eq 0)
+        $src = Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/ZenitH-AT/nvidia-update/main/nvidia-update.ps1' -UseBasicParsing
+        # -Silent = no prompts. The script installs only when a newer
+        # driver exists, so a re-run is a quick no-op if already current.
+        & ([scriptblock]::Create($src.Content)) -Silent
+        Log "nvidia-update finished."
+        return $true
     } catch {
-        Log "NVIDIA App install failed: $($_.Exception.Message)"
+        Log "NVIDIA driver update failed: $($_.Exception.Message)"
         return $false
     }
 }
@@ -330,8 +334,7 @@ $steps = @(
        Check = { Test-Installed -Names @('FACEIT') } }
     @{ Label = 'Installing Riot Client';       NeedsWinget = $true;  Action = { Install-App 'RiotGames.Valorant.NA' }
        Check = { Test-Installed -Names @('VALORANT','Riot') -Paths @('C:\Riot Games\Riot Client\RiotClientServices.exe') } }
-    @{ Label = 'Installing NVIDIA App';        NeedsWinget = $false; Action = { Install-NvidiaApp }
-       Check = { Test-Installed -Names @('NVIDIA App') } }
+    @{ Label = 'Updating NVIDIA graphics driver'; NeedsWinget = $false; Action = { Update-NvidiaDriver } }
     @{ Label = 'Installing Brave';             NeedsWinget = $true;  Action = { Install-App 'Brave.Brave' }
        Check = { Test-Installed -Names @('Brave') } }
     @{ Label = 'Applying Brave privacy settings'; NeedsWinget = $false; Action = { Set-BravePolicies } }
@@ -345,6 +348,7 @@ $steps = @(
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Host "   winget was not found - some app installs will be skipped." -ForegroundColor Red
     Write-Host "   Install 'App Installer' from the Microsoft Store to enable them." -ForegroundColor Red
+    Write-Host "   (The NVIDIA driver step also needs 7-Zip, normally installed via winget.)" -ForegroundColor Red
     $failures += 'winget not available (some apps skipped)'
     $steps = $steps | Where-Object { -not $_.NeedsWinget }
 }
@@ -379,7 +383,7 @@ foreach ($step in $steps) {
 
     if (-not $ok) {
         # Trim "Installing " / "Setting " etc. for a tidy failure label
-        $short = $step.Label -replace '^(Installing|Setting|Creating|Applying|Tidying)\s+', ''
+        $short = $step.Label -replace '^(Installing|Updating|Setting|Creating|Applying|Tidying)\s+', ''
         $failures += $short
         Write-Host ("   FAILED: {0}" -f $short) -ForegroundColor Red
         Log ("STEP FAILED: {0}" -f $step.Label)
