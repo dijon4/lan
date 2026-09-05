@@ -77,6 +77,75 @@ function Disable-MouseAccel {
     return $true   # registry values are what matter; live refresh is best-effort
 }
 
+# Set the display to the highest refresh rate it supports at the CURRENT
+# resolution. Uses the built-in Windows display API - no extra tools.
+# Keeps the resolution exactly as-is; only the Hz goes up.
+function Set-MaxRefreshRate {
+    $sig = @'
+using System;
+using System.Runtime.InteropServices;
+public class DijonDisplay {
+    [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Ansi)]
+    public struct DEVMODE {
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmDeviceName;
+        public short dmSpecVersion; public short dmDriverVersion; public short dmSize; public short dmDriverExtra;
+        public int dmFields; public int dmPositionX; public int dmPositionY;
+        public int dmDisplayOrientation; public int dmDisplayFixedOutput;
+        public short dmColor; public short dmDuplex; public short dmYResolution; public short dmTTOption; public short dmCollate;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string dmFormName;
+        public short dmLogPixels; public int dmBitsPerPel; public int dmPelsWidth; public int dmPelsHeight;
+        public int dmDisplayFlags; public int dmDisplayFrequency;
+        public int dmICMMethod; public int dmICMIntent; public int dmMediaType; public int dmDitherType;
+        public int dmReserved1; public int dmReserved2; public int dmPanningWidth; public int dmPanningHeight;
+    }
+    [DllImport("user32.dll")] public static extern int EnumDisplaySettings(string devName, int modeNum, ref DEVMODE devMode);
+    [DllImport("user32.dll")] public static extern int ChangeDisplaySettings(ref DEVMODE devMode, int flags);
+}
+'@
+    Add-Type -TypeDefinition $sig -ErrorAction SilentlyContinue
+
+    $ENUM_CURRENT_SETTINGS = -1
+    $CDS_UPDATEREGISTRY    = 0x00000001
+    $DM_PELSWIDTH          = 0x00080000
+    $DM_PELSHEIGHT         = 0x00100000
+    $DM_DISPLAYFREQUENCY   = 0x00400000
+
+    # Read the current mode (resolution + current Hz).
+    $cur = New-Object DijonDisplay+DEVMODE
+    $cur.dmSize = [short][System.Runtime.InteropServices.Marshal]::SizeOf([type]([DijonDisplay+DEVMODE]))
+    if ([DijonDisplay]::EnumDisplaySettings($null, $ENUM_CURRENT_SETTINGS, [ref]$cur) -eq 0) {
+        Log "Refresh rate: could not read current display mode."
+        return $false
+    }
+    $w = $cur.dmPelsWidth
+    $h = $cur.dmPelsHeight
+    $currentHz = $cur.dmDisplayFrequency
+    $bestHz = $currentHz
+
+    # Walk every supported mode; remember the highest Hz at THIS resolution.
+    $idx = 0
+    while ($true) {
+        $m = New-Object DijonDisplay+DEVMODE
+        $m.dmSize = [short][System.Runtime.InteropServices.Marshal]::SizeOf([type]([DijonDisplay+DEVMODE]))
+        if ([DijonDisplay]::EnumDisplaySettings($null, $idx, [ref]$m) -eq 0) { break }
+        if ($m.dmPelsWidth -eq $w -and $m.dmPelsHeight -eq $h -and $m.dmDisplayFrequency -gt $bestHz) {
+            $bestHz = $m.dmDisplayFrequency
+        }
+        $idx++
+    }
+
+    if ($bestHz -le $currentHz) {
+        Log "Refresh rate: already at the highest ($currentHz Hz) for ${w}x${h}."
+        return $true
+    }
+
+    $cur.dmDisplayFrequency = $bestHz
+    $cur.dmFields = $DM_PELSWIDTH -bor $DM_PELSHEIGHT -bor $DM_DISPLAYFREQUENCY
+    $res = [DijonDisplay]::ChangeDisplaySettings([ref]$cur, $CDS_UPDATEREGISTRY)
+    Log "Refresh rate: ${w}x${h}  ${currentHz}Hz -> ${bestHz}Hz (result code $res, 0 = success)."
+    return ($res -eq 0)
+}
+
 # Import the NVIDIA profile via Profile Inspector.
 function Import-NvidiaProfile {
     $nvpi = Join-Path $PSScriptRoot 'ProfileInspector\nvidiaProfileInspector.exe'
@@ -91,6 +160,7 @@ $steps = @(
     @{ Label = 'Applying power settings';      Action = { Set-PowerSettings } }
     @{ Label = 'Disabling Game DVR';           Action = { Disable-GameDVR } }
     @{ Label = 'Disabling mouse acceleration'; Action = { Disable-MouseAccel } }
+    @{ Label = 'Setting max refresh rate';     Action = { Set-MaxRefreshRate } }
     @{ Label = 'Applying NVIDIA profile';      Action = { Import-NvidiaProfile } }
 )
 

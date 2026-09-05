@@ -57,7 +57,7 @@ $OptionMap = [ordered]@{
     "1" = @{ Name = "Setup NVIDIA + performance settings";           Bat = "tournament-setup.bat" }
     "2" = @{ Name = "Windows 11 Cleanup (Default)";                  Bat = "run-win11debloat.bat" }
     "3" = @{ Name = "Windows 11 Cleanup (Custom)";                   Bat = "run-win11debloat-custom.bat" }
-    "4" = @{ Name = "Install Important Apps (Discord, Steam, Riot, GHUB)"; Bat = "install-apps.bat" }
+    "4" = @{ Name = "Install Apps (Discord, Steam, GHUB, Riot, FACEIT AC, NVIDIA App, Brave) + startup/default tidy"; Bat = "install-apps.bat" }
 }
 
 function Show-Menu {
