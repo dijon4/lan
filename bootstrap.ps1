@@ -148,6 +148,12 @@ $logPath = Join-Path $env:TEMP "dijon-setup.log"
 $env:DIJON_LOG = $logPath
 "DIJON Windows Setup Tool - log started $(Get-Date)" | Set-Content -Path $logPath -ErrorAction SilentlyContinue
 
+# Summary file - the app installer writes a machine-readable list of
+# what it installed / already had / failed; the final screen reads it.
+$summaryPath = Join-Path $env:TEMP "dijon-summary.txt"
+$env:DIJON_SUMMARY = $summaryPath
+Set-Content -Path $summaryPath -Value $null -ErrorAction SilentlyContinue
+
 # Runs a single task (a .bat) and returns $true on success, $false on
 # failure. Used for both the first pass and any retries.
 function Invoke-DijonTask($item, $index, $count, $work) {
@@ -169,6 +175,54 @@ function Invoke-DijonTask($item, $index, $count, $work) {
         Write-Host ("  Problem during '{0}': {1}" -f $item.Name, $_.Exception.Message) -ForegroundColor Yellow
         return $false
     }
+}
+
+# Turns a .bat file name into the friendly heading shown on the summary.
+function Get-TaskLabel($bat) {
+    switch ($bat) {
+        "tournament-setup.bat"        { "Graphics settings" }
+        "run-win11debloat.bat"        { "Windows 11 debloat" }
+        "run-win11debloat-custom.bat" { "Windows 11 debloat" }
+        "install-apps.bat"            { "App install" }
+        default                       { $bat }
+    }
+}
+
+# Draws the final report card: a Complete/Failed line for each task that
+# was run, plus - if the app installer ran - a breakdown of what was
+# downloaded, what the PC already had, and what failed.
+function Show-FinalSummary($status, $summaryPath) {
+    Write-Host ""
+    Write-Host "   ================= SUMMARY =================" -ForegroundColor Cyan
+    foreach ($name in $status.Keys) {
+        if ($status[$name]) {
+            Write-Host ("   {0,-22} Complete" -f $name) -ForegroundColor Green
+        } else {
+            Write-Host ("   {0,-22} Failed"   -f $name) -ForegroundColor Red
+        }
+    }
+
+    # App-level breakdown (only present if the App install step ran).
+    if ($summaryPath -and (Test-Path $summaryPath)) {
+        $installed = @(); $already = @(); $failedApps = @()
+        foreach ($line in (Get-Content $summaryPath -ErrorAction SilentlyContinue)) {
+            if ($line -notmatch '\|') { continue }
+            $parts = $line.Split('|', 2)
+            switch ($parts[0]) {
+                "Installed"         { $installed  += $parts[1] }
+                "Already installed" { $already    += $parts[1] }
+                "Failed"            { $failedApps += $parts[1] }
+            }
+        }
+        if ($installed.Count -or $already.Count -or $failedApps.Count) {
+            Write-Host ""
+            Write-Host "   Apps:" -ForegroundColor Cyan
+            if ($installed.Count)  { Write-Host ("     Downloaded : {0}" -f ($installed  -join ', ')) -ForegroundColor Green }
+            if ($already.Count)    { Write-Host ("     Already had: {0}" -f ($already    -join ', ')) -ForegroundColor DarkGray }
+            if ($failedApps.Count) { Write-Host ("     Failed     : {0}" -f ($failedApps -join ', ')) -ForegroundColor Red }
+        }
+    }
+    Write-Host "   ==========================================" -ForegroundColor Cyan
 }
 
 # --- Download the package once ---
@@ -202,10 +256,13 @@ try {
 
     $count  = $selected.Count
     $failed = @()          # tasks that did not succeed
+    $status = [ordered]@{} # friendly task name -> $true (complete) / $false (failed)
     $idx    = 0
     foreach ($item in $selected) {
         $idx++
-        if (-not (Invoke-DijonTask $item $idx $count $workDir)) { $failed += $item }
+        $taskOk = Invoke-DijonTask $item $idx $count $workDir
+        $status[(Get-TaskLabel $item.Bat)] = $taskOk
+        if (-not $taskOk) { $failed += $item }
     }
 
     # ============================================================
@@ -217,17 +274,19 @@ try {
     while ($true) {
 
         if ($failed.Count -eq 0) {
+            # Nothing failed (apps that were skipped because they're
+            # already installed do NOT count as failures) -> show the
+            # summary and close on its own after a short readable pause.
             Remove-Item $workDir -Recurse -Force -ErrorAction SilentlyContinue
-            Write-Host ""
-            Write-Host "   All selected tasks are complete." -ForegroundColor Green
-            for ($s = 5; $s -ge 1; $s--) {
-                Write-Host ("`r   Opening summary in {0}... " -f $s) -NoNewline -ForegroundColor DarkGray
-                Start-Sleep -Seconds 1
-            }
             Clear-Host
             Write-Host $SuccessBanner -ForegroundColor Green
             Write-Host "   All selected tasks are complete." -ForegroundColor Green
-            Start-Sleep -Seconds 3
+            Show-FinalSummary $status $summaryPath
+            Write-Host ""
+            for ($s = 10; $s -ge 1; $s--) {
+                Write-Host ("`r   Closing in {0}...  " -f $s) -NoNewline -ForegroundColor DarkGray
+                Start-Sleep -Seconds 1
+            }
             [Environment]::Exit(0)
         }
 
@@ -248,7 +307,9 @@ try {
             $ri = 0
             foreach ($item in $retry) {
                 $ri++
-                if (-not (Invoke-DijonTask $item $ri $rc $workDir)) { $failed += $item }
+                $taskOk = Invoke-DijonTask $item $ri $rc $workDir
+                $status[(Get-TaskLabel $item.Bat)] = $taskOk
+                if (-not $taskOk) { $failed += $item }
             }
         }
         elseif ($pick -eq "2") {
@@ -265,7 +326,10 @@ try {
             Read-Host "   Press Enter to go back" | Out-Null
         }
         elseif ($pick -eq "3") {
+            Show-FinalSummary $status $summaryPath
+            Write-Host ""
             Remove-Item $workDir -Recurse -Force -ErrorAction SilentlyContinue
+            Read-Host "   Press Enter to close" | Out-Null
             [Environment]::Exit(1)
         }
         else {

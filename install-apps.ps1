@@ -27,6 +27,14 @@ Log "==================================================="
 Log "Install Apps  -  $(Get-Date)"
 Log "==================================================="
 
+# Machine-readable results for the final summary screen. The launcher
+# (bootstrap.ps1) reads this file to show what was installed, what was
+# already there, and what failed. Format per line: "Status|Name".
+$SummaryFile = if ($env:DIJON_SUMMARY) { $env:DIJON_SUMMARY } else { Join-Path $env:TEMP 'dijon-summary.txt' }
+function Summary($status, $name) { Add-Content -Path $SummaryFile -Value ("{0}|{1}" -f $status, $name) -ErrorAction SilentlyContinue }
+# Start our section clean so a retry doesn't double up the entries.
+Set-Content -Path $SummaryFile -Value $null -ErrorAction SilentlyContinue
+
 # ------------------------------------------------------------
 #  Detect already-installed apps (so we can skip them)
 #  We read every program's name from the Windows uninstall list
@@ -324,18 +332,18 @@ function Disable-StartupApps {
 # ------------------------------------------------------------
 $steps = @(
     @{ Label = 'Setting desktop wallpaper';    NeedsWinget = $false; Action = { Set-Wallpaper } }
-    @{ Label = 'Installing Discord';           NeedsWinget = $false; Action = { Install-Discord }
+    @{ Label = 'Installing Discord';           NeedsWinget = $false; Summary = 'Discord'; Action = { Install-Discord }
        Check = { Test-Installed -Names @('Discord') -Paths @((Join-Path $env:LOCALAPPDATA 'Discord\Update.exe')) } }
-    @{ Label = 'Installing Steam';             NeedsWinget = $true;  Action = { Install-App 'Valve.Steam' }
+    @{ Label = 'Installing Steam';             NeedsWinget = $true;  Summary = 'Steam'; Action = { Install-App 'Valve.Steam' }
        Check = { Test-Installed -Names @('Steam') -Paths @((Join-Path ${env:ProgramFiles(x86)} 'Steam\steam.exe')) } }
-    @{ Label = 'Installing Logitech G HUB';    NeedsWinget = $true;  Action = { Install-App 'Logitech.GHUB' }
+    @{ Label = 'Installing Logitech G HUB';    NeedsWinget = $true;  Summary = 'Logitech G HUB'; Action = { Install-App 'Logitech.GHUB' }
        Check = { Test-Installed -Names @('G HUB','Logitech G HUB') -Paths @((Join-Path $env:ProgramFiles 'LGHUB\lghub.exe')) } }
-    @{ Label = 'Installing FACEIT Anti-Cheat'; NeedsWinget = $true;  Action = { Install-App 'FACEITLTD.FACEITAC' }
+    @{ Label = 'Installing FACEIT Anti-Cheat'; NeedsWinget = $true;  Summary = 'FACEIT Anti-Cheat'; Action = { Install-App 'FACEITLTD.FACEITAC' }
        Check = { Test-Installed -Names @('FACEIT') } }
-    @{ Label = 'Installing Riot Client';       NeedsWinget = $true;  Action = { Install-App 'RiotGames.Valorant.NA' }
+    @{ Label = 'Installing Riot Client';       NeedsWinget = $true;  Summary = 'Riot Client'; Action = { Install-App 'RiotGames.Valorant.NA' }
        Check = { Test-Installed -Names @('VALORANT','Riot') -Paths @('C:\Riot Games\Riot Client\RiotClientServices.exe') } }
-    @{ Label = 'Updating NVIDIA graphics driver'; NeedsWinget = $false; Action = { Update-NvidiaDriver } }
-    @{ Label = 'Installing Brave';             NeedsWinget = $true;  Action = { Install-App 'Brave.Brave' }
+    @{ Label = 'Updating NVIDIA graphics driver'; NeedsWinget = $false; Summary = 'NVIDIA driver'; Action = { Update-NvidiaDriver } }
+    @{ Label = 'Installing Brave';             NeedsWinget = $true;  Summary = 'Brave'; Action = { Install-App 'Brave.Brave' }
        Check = { Test-Installed -Names @('Brave') } }
     @{ Label = 'Applying Brave privacy settings'; NeedsWinget = $false; Action = { Set-BravePolicies } }
     @{ Label = 'Setting up Brave auto-clean';  NeedsWinget = $false; Action = { Set-Maintenance } }
@@ -374,6 +382,7 @@ foreach ($step in $steps) {
             $shortSkip = $step.Label -replace '^Installing\s+', ''
             Write-Host ("   * {0} is already installed, skipped!" -f $shortSkip) -ForegroundColor Green
             Log ("SKIP (already installed): {0}" -f $step.Label)
+            if ($step.Summary) { Summary 'Already installed' $step.Summary }
             continue
         }
     }
@@ -387,6 +396,11 @@ foreach ($step in $steps) {
         $failures += $short
         Write-Host ("   FAILED: {0}" -f $short) -ForegroundColor Red
         Log ("STEP FAILED: {0}" -f $step.Label)
+    }
+
+    # Record the result for the final summary screen (apps only).
+    if ($step.Summary) {
+        if ($ok) { Summary 'Installed' $step.Summary } else { Summary 'Failed' $step.Summary }
     }
 }
 
